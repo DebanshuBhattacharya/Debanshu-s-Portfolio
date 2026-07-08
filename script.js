@@ -875,47 +875,29 @@ const jokes = [
 ];
 
 let clicks = 0;
+if (footerJoke) {
+  footerJoke.addEventListener("click", () => {
+    clicks++;
+    let randomidx = Math.floor(Math.random() * jokes.length);
 
-footerJoke.addEventListener("click", () => {
-  clicks++;
-  let randomidx = Math.floor(Math.random() * jokes.length);
+    if (clicks === 4) {
+      footerJoke.textContent = "You weren't supposed to find this 😶";
+      return;
+    }
 
-  if (clicks === 4) {
-    footerJoke.textContent = "You weren't supposed to find this 😶";
-    return;
-  }
+    if (clicks === 7) {
+      footerJoke.textContent = "You clicked it again 😂 Didn't you ";
+      return;
+    }
+    if (clicks === 10) {
+      footerJoke.textContent = "Okay, that's enough clicking... probably.";
+      return;
+    }
 
-  if (clicks === 7) {
-    footerJoke.textContent = "You clicked it again 😂 Didn't you ";
-    return;
-  }
-  if (clicks === 10) {
-    footerJoke.textContent = "Okay, that's enough clicking... probably.";
-    return;
-  }
-
-  if (footerJoke.textContent === jokes[randomidx]) {
-    randomidx = Math.floor(Math.random() * jokes.length);
-  }
-  footerJoke.textContent = jokes[randomidx];
-});
-
-/* Footer social icons entrance (footer itself has no separate
-   social row currently — this targets the back-to-top + copy
-   for a small soft entrance instead). */
-gsap.from(".footer-inner > *", {
-  opacity: 0,
-  y: 16,
-  duration: 0.7,
-  stagger: 0.1,
-  ease: "power3.out",
-  scrollTrigger: {
-    trigger: "footer",
-    start: "top 90%",
-    toggleActions: "play none none reverse",
-  },
-});
-
-
-
+    if (footerJoke.textContent === jokes[randomidx]) {
+      randomidx = Math.floor(Math.random() * jokes.length);
+    }
+    footerJoke.textContent = jokes[randomidx];
+  });
+}
 
