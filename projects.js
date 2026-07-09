@@ -1,4 +1,6 @@
-// particle canvas, same as the main page
+/* ============================================================
+   BACKGROUND PARTICLES (same setup as the main page)
+   ============================================================ */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 let W,
@@ -50,52 +52,95 @@ function loop() {
 }
 loop();
 
-// nav background on scroll
+/* ============================================================
+   NAVBAR — mirrors the main page: solid background past a small
+   scroll offset, and hides on scroll-down / reveals on scroll-up.
+   ============================================================ */
 const nav = document.getElementById("nav");
-window.addEventListener("scroll", () => {
-  nav.classList.toggle("scrolled", window.scrollY > 40);
-});
+const hamburger = document.getElementById("hamburger");
+const mobileMenu = document.getElementById("mobile-menu");
 
-// mobile menu
-const hamburger = document.querySelector(".hamburger");
-const mobileMenu = document.querySelector(".mobile-menu");
+let lastScrollY = window.scrollY;
+let navTicking = false;
+const NAV_REVEAL_THRESHOLD = 12; // px of scroll before reacting, avoids jitter
+const NAV_HIDE_START = 120; // don't hide until scrolled a bit past the top
+
+function updateNavOnScroll() {
+  const currentY = window.scrollY;
+  const delta = currentY - lastScrollY;
+
+  nav.classList.toggle("scrolled", currentY > 40);
+
+  const menuOpen = mobileMenu.classList.contains("open");
+
+  if (menuOpen || currentY < NAV_HIDE_START) {
+    nav.style.transform = "translateY(0)";
+  } else if (delta > NAV_REVEAL_THRESHOLD) {
+    nav.style.transform = "translateY(-100%)";
+  } else if (delta < -NAV_REVEAL_THRESHOLD) {
+    nav.style.transform = "translateY(0)";
+  }
+
+  lastScrollY = currentY;
+  navTicking = false;
+}
+
+window.addEventListener(
+  "scroll",
+  () => {
+    if (!navTicking) {
+      requestAnimationFrame(updateNavOnScroll);
+      navTicking = true;
+    }
+  },
+  { passive: true },
+);
 
 hamburger.addEventListener("click", () => {
   const isOpen = hamburger.classList.toggle("open");
+  hamburger.setAttribute("aria-expanded", String(isOpen));
   mobileMenu.classList.toggle("open", isOpen);
-  hamburger.setAttribute("aria-expanded", isOpen);
+  mobileMenu.setAttribute("aria-hidden", String(!isOpen));
 });
 
-document.querySelectorAll(".mobile-menu a").forEach((a) => {
-  a.addEventListener("click", () => {
+mobileMenu.querySelectorAll("a").forEach((link) => {
+  link.addEventListener("click", () => {
     hamburger.classList.remove("open");
-    mobileMenu.classList.remove("open");
     hamburger.setAttribute("aria-expanded", "false");
+    mobileMenu.classList.remove("open");
+    mobileMenu.setAttribute("aria-hidden", "true");
   });
 });
 
-// reveal cards as they scroll into view
-const observer = new IntersectionObserver(
+const backToTop = document.getElementById("back-to-top");
+if (backToTop) {
+  backToTop.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
+
+/* ============================================================
+   PROJECT CARDS — reveal on scroll, cursor spotlight, filtering
+   ============================================================ */
+const cardObserver = new IntersectionObserver(
   (entries) => {
-    entries.forEach((entry, i) => {
-      if (entry.isIntersecting) {
-        const card = entry.target;
-        const delay = parseInt(card.dataset.delay || 0);
-        setTimeout(() => card.classList.add("show"), delay);
-        observer.unobserve(card);
-      }
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const card = entry.target;
+      const delay = parseInt(card.dataset.delay || 0);
+      setTimeout(() => card.classList.add("show"), delay);
+      cardObserver.unobserve(card);
     });
   },
   { threshold: 0.08 },
 );
 
-document.querySelectorAll(".project-card").forEach((card, i) => {
-  card.dataset.delay = (i % 3) * 80;
-  observer.observe(card);
-});
+const cards = document.querySelectorAll(".project-card");
 
-// spotlight that follows the cursor
-document.querySelectorAll(".project-card").forEach((card) => {
+cards.forEach((card, i) => {
+  card.dataset.delay = (i % 3) * 80;
+  cardObserver.observe(card);
+
   card.addEventListener("mousemove", (e) => {
     const rect = card.getBoundingClientRect();
     card.style.setProperty("--x", `${e.clientX - rect.left}px`);
@@ -107,9 +152,7 @@ document.querySelectorAll(".project-card").forEach((card) => {
   });
 });
 
-// filter buttons
 const filterBtns = document.querySelectorAll(".filter-btn");
-const cards = document.querySelectorAll(".project-card");
 
 filterBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -133,7 +176,9 @@ filterBtns.forEach((btn) => {
   });
 });
 
-// magnetic hover pull on nav buttons
+/* ============================================================
+   MAGNETIC HOVER PULL on nav buttons
+   ============================================================ */
 document.querySelectorAll(".magnetic").forEach((btn) => {
   btn.addEventListener(
     "mousemove",

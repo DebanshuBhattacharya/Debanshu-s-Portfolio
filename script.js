@@ -7,23 +7,26 @@
 
 gsap.registerPlugin(ScrollTrigger);
 
-/* Global easing + duration defaults so every tween shares the
-   same "premium" feel unless intentionally overridden. */
 gsap.defaults({
   ease: "power3.out",
   duration: 0.9,
 });
 
-/* Respect the user's motion preference. When true, we skip
-   scroll/mouse-driven motion and any decorative animation,
-   but keep functional JS (nav toggle, form validation, etc). */
+/* Stop the browser from restoring a stale scroll position on
+   refresh (this was the main cause of the page "jumping" right
+   after reload) and always start at the top unless the URL
+   already points at a specific section via a hash. */
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+if (!window.location.hash) {
+  window.scrollTo(0, 0);
+}
+
 const REDUCED_MOTION = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
 
-/* ============================================================
-   SCROLL PROGRESS BAR
-   ============================================================ */
 const scrollProgress = document.getElementById("scroll-progress");
 
 function updateScrollProgress() {
@@ -34,12 +37,8 @@ function updateScrollProgress() {
 }
 
 window.addEventListener("scroll", updateScrollProgress, { passive: true });
-updateScrollProgress(); // initialise on load
+updateScrollProgress();
 
-/* ============================================================
-   CANVAS PARTICLES  (unchanged logic, kept as-is — it's cheap
-   and already GPU/canvas driven)
-   ============================================================ */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 let W,
@@ -91,46 +90,85 @@ function loop() {
 }
 loop();
 
-/* ============================================================
-   CURSOR GLOW — lightweight, GPU-cheap follower.
-   Uses gsap.quickTo for buttery interpolation instead of
-   setting style on every mousemove (avoids layout thrash).
-   ============================================================ */
-
 const cursor = document.querySelector("#cursor");
 
-const xTo = gsap.quickTo(cursor, "x", {
-  duration: 0.3,
-  ease: "power3.out",
-});
+if (cursor) {
+  const xTo = gsap.quickTo(cursor, "x", {
+    duration: 0.3,
+    ease: "power3.out",
+  });
 
-const yTo = gsap.quickTo(cursor, "y", {
-  duration: 0.3,
-  ease: "power3.out",
-});
+  const yTo = gsap.quickTo(cursor, "y", {
+    duration: 0.3,
+    ease: "power3.out",
+  });
 
-window.addEventListener("mousemove", (e) => {
-  xTo(e.clientX);
-  yTo(e.clientY);
-});
+  window.addEventListener("mousemove", (e) => {
+    xTo(e.clientX);
+    yTo(e.clientY);
+  });
+}
 
-/* ============================================================
-   NAV — SCROLLED STATE
-   ============================================================ */
 const nav = document.querySelector("#nav");
+
+/* Hide the navbar as you scroll down (more room to view content),
+   bring it back the moment you scroll up even slightly. Stays
+   visible near the very top and while the mobile menu is open.
+
+   IMPORTANT: this is driven through GSAP (gsap.to), not a CSS
+   class. The hero entrance timeline above already animates #nav
+   with GSAP, which leaves an inline transform on the element —
+   inline styles always beat an external stylesheet, so toggling
+   a CSS class here would visually do nothing. Using GSAP for both
+   keeps a single, consistent owner of that transform. */
+let lastScrollY = window.scrollY;
+let navTicking = false;
+let navHidden = false;
+const NAV_REVEAL_THRESHOLD = 12; // px of scroll before we react, avoids jitter
+const NAV_HIDE_START = 120; // don't hide until scrolled a bit past the top
+
+function setNavHidden(hidden) {
+  if (hidden === navHidden) return;
+  navHidden = hidden;
+  gsap.to(nav, {
+    yPercent: hidden ? -100 : 0,
+    duration: 0.35,
+    ease: "power2.out",
+    overwrite: "auto",
+  });
+}
+
+function updateNavOnScroll() {
+  const currentY = window.scrollY;
+  const delta = currentY - lastScrollY;
+
+  nav.classList.toggle("scrolled", currentY > 60);
+
+  const menuOpen = mobileMenu && mobileMenu.classList.contains("open");
+
+  if (menuOpen || currentY < NAV_HIDE_START) {
+    setNavHidden(false);
+  } else if (delta > NAV_REVEAL_THRESHOLD) {
+    setNavHidden(true);
+  } else if (delta < -NAV_REVEAL_THRESHOLD) {
+    setNavHidden(false);
+  }
+
+  lastScrollY = currentY;
+  navTicking = false;
+}
+
 window.addEventListener(
   "scroll",
   () => {
-    nav.classList.toggle("scrolled", window.scrollY > 60);
+    if (!navTicking) {
+      requestAnimationFrame(updateNavOnScroll);
+      navTicking = true;
+    }
   },
   { passive: true },
 );
 
-/* ============================================================
-   NAV — ACTIVE SECTION HIGHLIGHTING (ScrollTrigger)
-   Each section gets a trigger that toggles the matching
-   nav link's `.active` class as it crosses the viewport centre.
-   ============================================================ */
 const navLinkMap = {};
 document.querySelectorAll(".nav-links a[data-nav]").forEach((link) => {
   navLinkMap[link.dataset.nav] = link;
@@ -153,9 +191,6 @@ function setActiveLink(activeLink) {
   activeLink.classList.add("active");
 }
 
-/* ============================================================
-   MOBILE HAMBURGER MENU
-   ============================================================ */
 const hamburger = document.getElementById("hamburger");
 const mobileMenu = document.getElementById("mobile-menu");
 
@@ -177,9 +212,6 @@ mobileMenu.querySelectorAll("a").forEach((link) => {
   link.addEventListener("click", closeMenu);
 });
 
-/* ============================================================
-   SMOOTH SCROLL — INTERNAL LINKS
-   ============================================================ */
 document.querySelectorAll('a[href^="#"]').forEach((link) => {
   link.addEventListener("click", (e) => {
     const href = link.getAttribute("href");
@@ -195,9 +227,6 @@ document.querySelectorAll('a[href^="#"]').forEach((link) => {
   });
 });
 
-/* ============================================================
-   BACK TO TOP
-   ============================================================ */
 const backToTop = document.getElementById("back-to-top");
 if (backToTop) {
   backToTop.addEventListener("click", () => {
@@ -205,11 +234,6 @@ if (backToTop) {
   });
 }
 
-/* ============================================================
-   MAGNETIC BUTTONS — smoothed with gsap.quickTo instead of
-   raw style writes, so the pull feels springy rather than
-   1-to-1 with the cursor.
-   ============================================================ */
 document.querySelectorAll(".magnetic").forEach((btn) => {
   if (REDUCED_MOTION) return;
   const moveX = gsap.quickTo(btn, "x", { duration: 0.5, ease: "power3.out" });
@@ -232,9 +256,6 @@ document.querySelectorAll(".magnetic").forEach((btn) => {
   });
 });
 
-/* ============================================================
-   RIPPLE EFFECT — subtle click feedback on .btn elements
-   ============================================================ */
 document.querySelectorAll(".btn").forEach((btn) => {
   btn.addEventListener("click", (e) => {
     const rect = btn.getBoundingClientRect();
@@ -260,17 +281,10 @@ document.querySelectorAll(".btn").forEach((btn) => {
   });
 });
 
-/* ============================================================
-   HERO — CINEMATIC ENTRANCE TIMELINE
-   Nav drops in → headline lines wipe up → sub fades → actions
-   fade → scroll indicator fades in and starts its float loop.
-   ============================================================ */
 const heroTl = gsap.timeline({ defaults: { ease: "power4.out" } });
 
 heroTl
   .from("#nav", { opacity: 0, y: -60, duration: 0.7, ease: "back.out(1.6)" })
-  .from(".eyebrow", { opacity: 0, y: 16, duration: 0.6 }, "-=0.25")
-  .to(".eyebrow", { opacity: 1, y: 0, duration: 0.6 }, "<")
   .to(
     ".hero-line-inner",
     { y: "0%", duration: 1.1, stagger: 0.14, ease: "power4.out" },
@@ -292,8 +306,6 @@ heroTl
     "-=0.3",
   );
 
-/* Scroll indicator — gentle bobbing loop + fade out once the
-   user actually starts scrolling. */
 if (!REDUCED_MOTION) {
   gsap.to(".scroll-indicator__dot", {
     y: 10,
@@ -318,9 +330,6 @@ ScrollTrigger.create({
   },
 });
 
-/* Hero mouse parallax — headline + eyebrow drift very slightly
-   opposite the cursor for a subtle depth effect. Skipped on
-   touch devices and reduced-motion. */
 if (!REDUCED_MOTION && window.matchMedia("(hover: hover)").matches) {
   const heroSection = document.querySelector(".hero");
   const parallaxX = gsap.quickTo(".hero-headline", "x", {
@@ -348,9 +357,6 @@ if (!REDUCED_MOTION && window.matchMedia("(hover: hover)").matches) {
   });
 }
 
-/* Per-character hover glow on the name "Debanshu" (kept from
-   original, now driven off the same GSAP instance for
-   consistency and reduced-motion safety). */
 function hoverGlow(className) {
   document.querySelectorAll(`.${className} span`).forEach((elem) => {
     elem.addEventListener("mouseenter", () => {
@@ -382,40 +388,16 @@ if (debanshuEl) {
   });
 }
 
-/* ============================================================
-   SECTION FADE-IN — generic reveal used by every top-level
-   <section>. Replaces the old per-section gsap.fromTo loop with
-   a single matchMedia-aware batch so it responds correctly on
-   resize/orientation change and is easy to extend.
-   ============================================================ */
-gsap.matchMedia().add(
-  {
-    reduced: "(prefers-reduced-motion: reduce)",
-    full: "(prefers-reduced-motion: no-preference)",
-  },
-  (context) => {
-    const { reduced } = context.conditions;
+/* NOTE: there used to be a generic "fade the whole <section> in
+   with opacity/y" animation here, layered on top of every
+   section's own dedicated child animations below (about content,
+   project cards, skill boxes, timeline items, edu cards, resume
+   card, contact fields). Two transforms animating the same
+   real estate at slightly different scroll offsets is what was
+   causing the page to visibly "jump"/shift while scrolling —
+   removed in favor of letting each section's specific reveal do
+   the work on its own. */
 
-    document.querySelectorAll("section").forEach((section) => {
-      gsap.fromTo(section, reduced ? {} : { opacity: 0, y: 40 }, {
-        opacity: 1,
-        y: 0,
-        duration: 0.9,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: section,
-          start: "top 55%",
-          end: "top 30%",
-          toggleActions: "play none none reverse",
-        },
-      });
-    });
-  },
-);
-
-/* ============================================================
-   ABOUT — clip-path image reveal, staggered content, parallax
-   ============================================================ */
 const aboutImageFrame = document.querySelector(".about-sec .image-frame");
 if (aboutImageFrame) {
   gsap.fromTo(
@@ -433,7 +415,6 @@ if (aboutImageFrame) {
     },
   );
 
-  // Subtle parallax drift on the photo itself while scrolling past
   if (!REDUCED_MOTION) {
     gsap.fromTo(
       aboutImageFrame.querySelector("img"),
@@ -452,7 +433,6 @@ if (aboutImageFrame) {
   }
 }
 
-// Staggered reveal of the About copy lines + floating card
 const aboutTl = gsap.timeline({
   scrollTrigger: {
     trigger: ".about-sec",
@@ -473,14 +453,8 @@ aboutTl
     "-=0.3",
   );
 
-/* ============================================================
-   PROJECTS — CARD REVEAL, LIFT + TILT, IMAGE ZOOM
-   ============================================================ */
 const projectCards = document.querySelectorAll(".project-card");
 
-// Staggered entrance driven by ScrollTrigger (replaces manual
-// IntersectionObserver + setTimeout combo for smoother, scroll
-// position–aware timing).
 if (projectCards.length) {
   gsap.to(projectCards, {
     opacity: 1,
@@ -543,11 +517,6 @@ projectCards.forEach((card) => {
   });
 });
 
-/* ============================================================
-   SKILLS — staggered card entrance + magnetic-style tilt
-   (kept lightweight: no separate progress bars in the markup,
-   so we animate opacity/translate + existing 3D tilt instead).
-   ============================================================ */
 const skillBoxes = document.querySelectorAll(".skill-box");
 if (skillBoxes.length) {
   gsap.to(skillBoxes, {
@@ -597,7 +566,6 @@ skillBoxes.forEach((card) => {
     tiltY(0);
   });
 
-  // Icon micro-interaction: gentle rotate + scale pop on hover
   const icon = card.querySelector(".skill-icon");
   if (icon) {
     card.addEventListener("mouseenter", () => {
@@ -619,10 +587,6 @@ skillBoxes.forEach((card) => {
   }
 });
 
-/* ============================================================
-   TIMELINE — animated vertical "draw" line (scrubbed to scroll)
-   + staggered card entrance + active-dot highlighting
-   ============================================================ */
 const timelineProgress = document.querySelector(".timeline-progress");
 if (timelineProgress) {
   gsap.to(timelineProgress, {
@@ -662,10 +626,6 @@ timelineItems.forEach((item, i) => {
   });
 });
 
-/* ============================================================
-   EDUCATION — counters + detail-card spotlight (spotlight
-   logic kept, counters are new)
-   ============================================================ */
 document.querySelectorAll("[data-counter]").forEach((el) => {
   const target = parseFloat(el.dataset.counter);
   const suffix = el.dataset.suffix || "";
@@ -704,7 +664,6 @@ document.querySelectorAll(".edu-detail-card").forEach((card) => {
   });
 });
 
-// Education detail cards + journey steps stagger in on scroll
 gsap.from(".edu-detail-card", {
   opacity: 0,
   y: 30,
@@ -718,9 +677,6 @@ gsap.from(".edu-detail-card", {
   },
 });
 
-/* ============================================================
-   RESUME — card reveal
-   ============================================================ */
 gsap.from(".resume-card", {
   opacity: 0,
   y: 40,
@@ -733,10 +689,6 @@ gsap.from(".resume-card", {
   },
 });
 
-/* ============================================================
-   CONTACT — fields reveal one by one, socials stagger in,
-   success animation after submit
-   ============================================================ */
 gsap.to(".social-link", {
   opacity: 1,
   x: 0,
@@ -763,9 +715,6 @@ gsap.to(".field-group", {
   },
 });
 
-/* ============================================================
-   CONTACT FORM — VALIDATION + SUBMISSION FEEDBACK
-   ============================================================ */
 const form = document.getElementById("contact-form");
 const sendButton = document.getElementById("send-button");
 
@@ -787,7 +736,6 @@ function validateField(input) {
   if (message) {
     input.classList.add("invalid");
     if (errorEl) errorEl.textContent = message;
-    // Soft shake to draw the eye to the error without being harsh
     gsap.fromTo(
       group,
       { x: -6 },
@@ -818,9 +766,6 @@ if (form) {
     const original = sendButton.innerHTML;
     sendButton.disabled = true;
 
-    // Success sequence: button morphs to a checkmark state with a
-    // soft scale bounce, holds, then the form resets and fades
-    // back in.
     const successTl = gsap.timeline();
     successTl
       .to(sendButton, { scale: 0.94, duration: 0.12, ease: "power2.in" })
@@ -829,7 +774,7 @@ if (form) {
         sendButton.style.background = "#2cb67d";
       })
       .to(sendButton, { scale: 1, duration: 0.45, ease: "back.out(2.2)" })
-      .to({}, { duration: 1.6 }) // hold
+      .to({}, { duration: 1.6 })
       .to(form.querySelectorAll(".input"), {
         opacity: 0.4,
         duration: 0.25,
@@ -855,11 +800,6 @@ if (form) {
   });
 }
 
-/* ============================================================
-   FOOTER — easter egg + gentle floating orb (uses existing
-   aurora orbs already in the DOM, no extra elements needed)
-   ============================================================ */
-
 const footerJoke = document.getElementById("footer-joke");
 
 const jokes = [
@@ -873,6 +813,19 @@ const jokes = [
   "Don't judge my class names.",
   "Somewhere there's a div with too much margin.",
 ];
+
+/* Recalculate all ScrollTrigger start/end offsets once images
+   and web fonts have actually finished loading. Without this,
+   triggers get their positions from a layout that's still
+   waiting on font metrics / image boxes, so the numbers are
+   slightly wrong until GSAP happens to recompute — which can
+   itself look like a small upward jump mid-scroll. */
+window.addEventListener("load", () => {
+  ScrollTrigger.refresh();
+});
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => ScrollTrigger.refresh());
+}
 
 let clicks = 0;
 if (footerJoke) {
@@ -900,4 +853,3 @@ if (footerJoke) {
     footerJoke.textContent = jokes[randomidx];
   });
 }
-
